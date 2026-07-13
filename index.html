@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#274D24">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sneglefart">
+<title>Sneglefart 🐌</title>
+<style>
+  :root{
+    --green:#3E6B3A; --green-dark:#274D24; --brown:#8A5A33;
+    --bg:#2A2A26; --panel:#F4F2EA; --ink:#26251F;
+    --safe-top:env(safe-area-inset-top,0px);
+    --safe-bottom:env(safe-area-inset-bottom,0px);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+  body{background:var(--bg);font-family:-apple-system,'Segoe UI',Roboto,sans-serif;color:var(--ink)}
+  #map{position:fixed;inset:0;touch-action:none;display:block}
+
+  /* top bar */
+  #topbar{position:fixed;top:0;left:0;right:0;display:flex;gap:8px;
+    padding:calc(8px + var(--safe-top)) 8px 8px 8px;z-index:5}
+  .btn{border:none;border-radius:22px;padding:11px 18px;font-size:15px;font-weight:600;
+    background:#DCE7D8;color:var(--green-dark);cursor:pointer}
+  .btn:active{filter:brightness(.92)}
+  #btnPhoto{flex:0 0 auto;width:46px;padding:11px 0;font-size:18px}
+  #btnSnails{flex:1}
+
+  /* fab */
+  #fab{position:fixed;left:50%;transform:translateX(-50%);
+    bottom:calc(20px + var(--safe-bottom));z-index:5;
+    background:var(--green);color:#fff;border:none;border-radius:26px;
+    padding:15px 24px;font-size:15px;font-weight:600;cursor:pointer;
+    box-shadow:0 3px 10px rgba(0,0,0,.4)}
+  #fab:active{filter:brightness(1.1)}
+
+  /* modal + sheet */
+  #overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10;display:none;
+    align-items:center;justify-content:center;padding:20px}
+  #overlay.sheet{align-items:flex-end;padding:0}
+  #overlay.show{display:flex}
+  #box{background:var(--panel);border-radius:16px;max-width:420px;width:100%;
+    max-height:min(80vh, 100%);overflow-y:auto;padding:20px;-webkit-overflow-scrolling:touch}
+  #overlay.sheet #box{border-radius:16px 16px 0 0;max-width:none;
+    padding-bottom:calc(20px + var(--safe-bottom))}
+  #box h2{font-size:19px;margin-bottom:6px;color:var(--green-dark)}
+  #box .sub{font-size:13px;color:#666;margin-bottom:10px}
+  #box p{margin:8px 0;white-space:pre-wrap}
+  #box label{display:block;font-size:13px;color:#666;margin:12px 0 4px}
+  #box input[type=text],#box input[type=datetime-local]{
+    width:100%;padding:11px;border:1.5px solid #BBB;border-radius:10px;
+    font-size:16px;background:#fff;color:var(--ink)}
+  .row{display:flex;gap:8px;margin-top:16px;justify-content:flex-end;flex-wrap:wrap}
+  .row .btn{padding:10px 16px}
+  .btn.primary{background:var(--green);color:#fff}
+  .btn.outline{background:transparent;border:1.5px solid var(--green);color:var(--green-dark)}
+  .btn.danger{background:transparent;border:1.5px solid #B3402F;color:#B3402F}
+  .btn.wide{width:100%;margin-top:8px}
+
+  /* color swatches */
+  #swatches{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:12px}
+  .sw{aspect-ratio:1;border-radius:50%;cursor:pointer;border:3px solid transparent}
+  .sw.sel{border-color:#000}
+
+  /* snail list */
+  .snailrow{display:flex;align-items:center;gap:12px;padding:11px 2px;
+    border-bottom:1px solid #DDD;cursor:pointer}
+  .snailrow .dot{width:22px;height:22px;border-radius:50%;flex:0 0 auto;
+    border:1px solid rgba(0,0,0,.25)}
+  .snailrow .meta{flex:1;min-width:0}
+  .snailrow .nm{font-weight:600;font-size:16px}
+  .snailrow .inf{font-size:12.5px;color:#666}
+  .snailrow .edit{border:none;background:none;font-size:18px;padding:8px;cursor:pointer}
+  .snailrow input[type=checkbox]{width:21px;height:21px;accent-color:var(--green)}
+  #choicelist .btn{display:block;width:100%;text-align:left;margin-top:8px}
+</style>
+</head>
+<body>
+
+<canvas id="map"></canvas>
+
+<div id="topbar">
+  <button class="btn" id="btnPhoto" title="Vælg havefoto">🖼</button>
+  <button class="btn" id="btnSnails">Snegle</button>
+</div>
+
+<button id="fab">🐌 Ny observation</button>
+
+<div id="overlay"><div id="box"></div></div>
+<input type="file" id="photoInput" accept="image/*" hidden>
+<input type="file" id="importInput" accept="application/json" hidden>
+
+<script>
+"use strict";
+/* ============================== data =============================== */
+const PALETTE=["#E53935","#FB8C00","#FDD835","#43A047","#00ACC1","#1E88E5",
+               "#5E35B1","#D81B60","#6D4C41","#546E7A","#7CB342","#00897B"];
+const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
+
+let state={snails:[],obs:[]};
+try{const s=localStorage.getItem("sf_data"); if(s) state=JSON.parse(s);}catch(e){}
+const visible=new Set(state.snails.map(s=>s.id));
+
+function save(){
+  try{localStorage.setItem("sf_data",JSON.stringify(state));}
+  catch(e){alert("Kunne ikke gemme – lageret er fuldt.");}
+}
+const obsFor=id=>state.obs.filter(o=>o.snailId===id).sort((a,b)=>a.ts-b.ts);
+
+const fmt=new Intl.DateTimeFormat("da-DK",
+  {day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
+const fmtTs=ts=>fmt.format(new Date(ts));
+function toLocalInput(ts){const d=new Date(ts),p=n=>String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;}
+
+/* ============================== photo ============================== */
+let photo=null;
+(function loadPhoto(){
+  const d=localStorage.getItem("sf_photo");
+  if(d){const img=new Image(); img.onload=()=>{photo=img; fitView(); draw();}; img.src=d;}
+})();
+
+photoInput.onchange=()=>{
+  const f=photoInput.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    const img=new Image();
+    img.onload=()=>{
+      const MAX=1600, k=Math.min(1,MAX/Math.max(img.width,img.height));
+      const c=document.createElement("canvas");
+      c.width=Math.round(img.width*k); c.height=Math.round(img.height*k);
+      c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+      const data=c.toDataURL("image/jpeg",0.82);
+      try{localStorage.setItem("sf_photo",data);}
+      catch(e){alert("Fotoet er for stort til at gemme – prøv et mindre billede."); return;}
+      const p=new Image(); p.onload=()=>{photo=p; fitView(); draw();}; p.src=data;
+    };
+    img.src=r.result;
+  };
+  r.readAsDataURL(f);
+  photoInput.value="";
+};
+
+/* ======================= canvas + view transform =================== */
+const cv=document.getElementById("map"), ctx=cv.getContext("2d");
+let W=0,H=0,DPR=1;
+function resize(){
+  DPR=window.devicePixelRatio||1;
+  W=window.innerWidth; H=window.innerHeight;
+  cv.width=W*DPR; cv.height=H*DPR;
+  cv.style.width=W+"px"; cv.style.height=H+"px";
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  fitView(); draw();
+}
+window.addEventListener("resize",resize);
+
+/* screen = image * s + (tx,ty) */
+let view={s:1,tx:0,ty:0}, fitScale=1;
+function fitView(){
+  if(!photo) return;
+  fitScale=Math.min(W/photo.width,H/photo.height);
+  view.s=fitScale;
+  view.tx=(W-photo.width*fitScale)/2;
+  view.ty=(H-photo.height*fitScale)/2;
+}
+const toScreen=(nx,ny)=>[nx*photo.width*view.s+view.tx, ny*photo.height*view.s+view.ty];
+const toImage=(sx,sy)=>[(sx-view.tx)/(view.s*photo.width), (sy-view.ty)/(view.s*photo.height)];
+function zoomAt(f,cx,cy){
+  const ns=Math.min(Math.max(view.s*f,fitScale),fitScale*12);
+  const k=ns/view.s;
+  view.tx=cx-(cx-view.tx)*k; view.ty=cy-(cy-view.ty)*k; view.s=ns;
+}
+
+/* ============================ interaction ========================== */
+let placing=false, placingSnailId=null, movingObsId=null;
+const pointers=new Map();
+let pinch=null, drag=null, lastTap=0, lastTapXY=[0,0], legendDrag=false;
+
+cv.addEventListener("pointerdown",e=>{
+  cv.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId,[e.clientX,e.clientY]);
+  if(pointers.size===1){
+    drag={x:e.clientX,y:e.clientY,moved:false,t:Date.now()};
+    legendDrag=legend.expanded && legend.maxScroll>0 && inLegend(e.clientX,e.clientY);
+  }else if(pointers.size===2){
+    drag=null;
+    const [a,b]=[...pointers.values()];
+    pinch={d:Math.hypot(a[0]-b[0],a[1]-b[1])};
+  }
+});
+cv.addEventListener("pointermove",e=>{
+  if(!pointers.has(e.pointerId)) return;
+  const prev=pointers.get(e.pointerId);
+  pointers.set(e.pointerId,[e.clientX,e.clientY]);
+  if(pointers.size===1 && drag){
+    const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
+    if(Math.hypot(e.clientX-drag.x,e.clientY-drag.y)>6) drag.moved=true;
+    if(drag.moved){
+      if(legendDrag){legend.scroll=clamp(legend.scroll-dy,0,legend.maxScroll);}
+      else{view.tx+=dx; view.ty+=dy;}
+      drag.x=e.clientX; drag.y=e.clientY;
+      draw();
+    }
+  }else if(pointers.size===2 && pinch){
+    const [a,b]=[...pointers.values()];
+    const d=Math.hypot(a[0]-b[0],a[1]-b[1]);
+    const cx=(a[0]+b[0])/2, cy=(a[1]+b[1])/2;
+    if(pinch.d>0) zoomAt(d/pinch.d,cx,cy);
+    pinch.d=d;
+    draw();
+  }
+});
+function endPointer(e){
+  pointers.delete(e.pointerId);
+  if(pointers.size<2) pinch=null;
+  if(pointers.size===0 && drag){
+    if(!drag.moved && Date.now()-drag.t<400){
+      const now=Date.now(), [lx,ly]=lastTapXY;
+      if(now-lastTap<320 && Math.hypot(e.clientX-lx,e.clientY-ly)<40){
+        fitView(); draw(); lastTap=0;             // double-tap: reset view
+      }else{
+        lastTap=now; lastTapXY=[e.clientX,e.clientY];
+        handleTap(e.clientX,e.clientY);
+      }
+    }
+    drag=null; legendDrag=false;
+  }
+}
+cv.addEventListener("pointerup",endPointer);
+cv.addEventListener("pointercancel",endPointer);
+cv.addEventListener("wheel",e=>{e.preventDefault();
+  if(photo){zoomAt(e.deltaY<0?1.12:1/1.12,e.clientX,e.clientY); draw();}},{passive:false});
+
+const clamp=(v,a,b)=>Math.min(Math.max(v,a),b);
+
+function handleTap(x,y){
+  if(!photo) return;
+  if(placing){
+    const [nx,ny]=toImage(x,y);
+    if(nx>=0&&nx<=1&&ny>=0&&ny<=1){placing=false; draw(); onPlaced(nx,ny);}
+    return;
+  }
+  if(legendTap(x,y)) return;
+  // nearest dot within 24px
+  let best=null,bd=24;
+  for(const t of trails()){
+    for(const o of t.points){
+      const [sx,sy]=toScreen(o.x,o.y);
+      const d=Math.hypot(sx-x,sy-y);
+      if(d<bd){bd=d;best=o;}
+    }
+  }
+  if(best) showObsInfo(best);
+}
+
+/* ============================== trails ============================= */
+const trails=()=>state.snails.filter(s=>visible.has(s.id))
+  .map(s=>({name:s.name,color:s.color,points:obsFor(s.id)}));
+
+/* ============================== legend ============================= */
+const legend={expanded:false,scroll:0,maxScroll:0,rect:null,rowH:0,pad:0,rows:0,hasAction:false};
+const MAXROWS=3;
+const inLegend=(x,y)=>legend.rect&&x>=legend.rect[0]&&x<=legend.rect[2]&&y>=legend.rect[1]&&y<=legend.rect[3];
+function legendTap(x,y){
+  if(!inLegend(x,y)) return false;
+  const n=trails().filter(t=>t.points.length).length;
+  if(!legend.expanded){
+    if(n>MAXROWS){legend.expanded=true; legend.scroll=0; draw();}
+    return true;
+  }
+  const idx=Math.floor((y-legend.rect[1]-legend.pad+legend.scroll)/legend.rowH);
+  if(legend.hasAction && idx>=legend.rows-1){legend.expanded=false; legend.scroll=0; draw();}
+  return true;
+}
+
+/* =============================== draw ============================== */
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  if(!photo){
+    ctx.fillStyle="#fff"; ctx.font="16px sans-serif"; ctx.textAlign="center";
+    ctx.fillText("Tryk på billedknappen for at vælge et foto af haven",W/2,H/2);
+    return;
+  }
+  ctx.save();
+  ctx.translate(view.tx,view.ty); ctx.scale(view.s,view.s);
+  ctx.drawImage(photo,0,0);
+  ctx.restore();
+
+  for(const t of trails()){
+    if(!t.points.length) continue;
+    ctx.strokeStyle=t.color; ctx.lineWidth=4; ctx.lineCap="round"; ctx.lineJoin="round";
+    ctx.beginPath();
+    t.points.forEach((o,i)=>{
+      const [sx,sy]=toScreen(o.x,o.y);
+      i?ctx.lineTo(sx,sy):ctx.moveTo(sx,sy);
+    });
+    ctx.stroke();
+    t.points.forEach((o,i)=>{
+      const [sx,sy]=toScreen(o.x,o.y);
+      const r=i===t.points.length-1?12:9;
+      ctx.fillStyle=t.color;
+      ctx.beginPath(); ctx.arc(sx,sy,r,0,7); ctx.fill();
+      ctx.strokeStyle="#fff"; ctx.lineWidth=2; ctx.stroke();
+      ctx.fillStyle="#fff"; ctx.font="bold 10px sans-serif";
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText(i+1,sx,sy);
+    });
+  }
+  drawLegend();
+  if(placing){
+    const text="Tryk på fotoet, hvor du så sneglen";
+    ctx.font="13px sans-serif";
+    const tw=ctx.measureText(text).width, cx=W/2, top=H-140;
+    ctx.fillStyle="rgba(62,107,58,.85)";
+    roundRect(cx-tw/2-12,top,tw+24,34,10); ctx.fill();
+    ctx.fillStyle="#fff"; ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText(text,cx,top+17);
+  }
+}
+function roundRect(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+function drawLegend(){
+  const vis=trails().filter(t=>t.points.length);
+  if(!vis.length){legend.rect=null; return;}
+  const pad=8, rowH=22;
+  legend.pad=pad; legend.rowH=rowH;
+  const collapsed=!legend.expanded && vis.length>MAXROWS;
+  const shown=collapsed?vis.slice(0,MAXROWS):vis;
+  const action=collapsed?`+${vis.length-MAXROWS} flere · tryk`
+    :(legend.expanded&&vis.length>MAXROWS?"Skjul listen ▲":null);
+  legend.hasAction=!!action;
+  legend.rows=shown.length+(action?1:0);
+
+  ctx.font="13px sans-serif";
+  let maxW=0;
+  shown.forEach(t=>maxW=Math.max(maxW,ctx.measureText(t.name).width));
+  if(action) maxW=Math.max(maxW,ctx.measureText(action).width);
+
+  const left=10, topBarH=document.getElementById("topbar").offsetHeight;
+  const top=topBarH+12;
+  const boxW=maxW+rowH+pad*3;
+  const contentH=rowH*legend.rows+pad*2;
+  const maxH=legend.expanded?H*0.55:contentH;
+  const boxH=Math.min(contentH,maxH);
+  legend.rect=[left,top,left+boxW,top+boxH];
+  legend.maxScroll=Math.max(0,contentH-boxH);
+  legend.scroll=clamp(legend.scroll,0,legend.maxScroll);
+
+  ctx.fillStyle="rgba(0,0,0,.6)";
+  roundRect(left,top,boxW,boxH,8); ctx.fill();
+  ctx.save();
+  roundRect(left,top,boxW,boxH,8); ctx.clip();
+  ctx.textBaseline="middle"; ctx.textAlign="left";
+  for(let i=0;i<legend.rows;i++){
+    const cy=top+pad+rowH*i+rowH/2-legend.scroll;
+    if(cy<top-rowH||cy>top+boxH+rowH) continue;
+    if(i<shown.length){
+      ctx.fillStyle=shown[i].color;
+      ctx.beginPath(); ctx.arc(left+pad+rowH/3,cy,rowH/3,0,7); ctx.fill();
+      ctx.fillStyle="#fff";
+      ctx.fillText(shown[i].name,left+pad+rowH,cy);
+    }else{
+      ctx.fillStyle="#C8DCFF"; ctx.font="bold 13px sans-serif";
+      ctx.fillText(action,left+pad,cy);
+      ctx.font="13px sans-serif";
+    }
+  }
+  ctx.restore();
+}
+
+/* ============================== modals ============================= */
+const overlay=document.getElementById("overlay"), box=document.getElementById("box");
+function openModal(html,sheet){
+  overlay.className="show"+(sheet?" sheet":"");
+  box.innerHTML=html;
+}
+function closeModal(){overlay.className=""; box.innerHTML="";}
+overlay.addEventListener("pointerdown",e=>{if(e.target===overlay) closeModal();});
+const esc=s=>s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ------------------------ add sighting flow ----------------------- */
+document.getElementById("fab").onclick=()=>{
+  if(!photo){alert("Vælg et havefoto først"); return;}
+  if(!state.snails.length){addSnailDialog(); return;}
+  openModal(`<h2>Hvilken snegl har du set?</h2><div id="choicelist"></div>
+    <div class="row"><button class="btn" id="c0">Annuller</button></div>`);
+  const list=document.getElementById("choicelist");
+  state.snails.forEach(s=>{
+    const b=document.createElement("button");
+    b.className="btn outline";
+    b.innerHTML=`<span style="display:inline-block;width:14px;height:14px;border-radius:50%;
+      background:${s.color};margin-right:8px;vertical-align:-2px"></span>${esc(s.name)}`;
+    b.onclick=()=>{closeModal(); placingSnailId=s.id; movingObsId=null; placing=true; draw();};
+    list.appendChild(b);
+  });
+  document.getElementById("c0").onclick=closeModal;
+};
+
+function onPlaced(nx,ny){
+  if(movingObsId){
+    const o=state.obs.find(o=>o.id===movingObsId);
+    if(o){o.x=nx; o.y=ny; save();}
+    movingObsId=null; draw();
+    return;
+  }
+  const snail=state.snails.find(s=>s.id===placingSnailId);
+  if(!snail) return;
+  openModal(`<h2>Ny observation af ${esc(snail.name)}</h2>
+    <label>Set</label><input type="datetime-local" id="fTs" value="${toLocalInput(Date.now())}">
+    <label>Note</label><input type="text" id="fNote" placeholder='Valgfri note (f.eks. "på rabarberen igen")'>
+    <div class="row">
+      <button class="btn" id="c0">Annuller</button>
+      <button class="btn primary" id="c1">Gem</button>
+    </div>`);
+  document.getElementById("c0").onclick=closeModal;
+  document.getElementById("c1").onclick=()=>{
+    const ts=new Date(document.getElementById("fTs").value).getTime()||Date.now();
+    state.obs.push({id:uid(),snailId:snail.id,x:nx,y:ny,ts,
+      note:document.getElementById("fNote").value.trim()});
+    visible.add(snail.id); save(); closeModal(); draw();
+  };
+}
+
+/* ------------------------- sighting info/edit --------------------- */
+function showObsInfo(o){
+  const snail=state.snails.find(s=>s.id===o.snailId); if(!snail) return;
+  const order=obsFor(snail.id).findIndex(x=>x.id===o.id)+1;
+  openModal(`<h2>${esc(snail.name)}</h2>
+    <p>Observation nr. ${order} af ${esc(snail.name)}
+${fmtTs(o.ts)}${o.note?`\n\n“${esc(o.note)}”`:""}</p>
+    <div class="row">
+      <button class="btn" id="c0">Luk</button>
+      <button class="btn primary" id="c1">Rediger</button>
+    </div>`);
+  document.getElementById("c0").onclick=closeModal;
+  document.getElementById("c1").onclick=()=>editObs(o,snail);
+}
+function editObs(o,snail){
+  openModal(`<h2>Rediger observation af ${esc(snail.name)}</h2>
+    <label>Set</label><input type="datetime-local" id="fTs" value="${toLocalInput(o.ts)}">
+    <label>Note</label><input type="text" id="fNote" value="${esc(o.note)}" placeholder="Valgfri note">
+    <button class="btn outline wide" id="cMove">Flyt observationen på kortet</button>
+    <button class="btn danger wide" id="cDel">Slet observationen</button>
+    <div class="row">
+      <button class="btn" id="c0">Annuller</button>
+      <button class="btn primary" id="c1">Gem</button>
+    </div>`);
+  const grab=()=>{
+    o.ts=new Date(document.getElementById("fTs").value).getTime()||o.ts;
+    o.note=document.getElementById("fNote").value.trim();
+    save();
+  };
+  document.getElementById("c0").onclick=closeModal;
+  document.getElementById("c1").onclick=()=>{grab(); closeModal(); draw();};
+  document.getElementById("cMove").onclick=()=>{
+    grab(); movingObsId=o.id; placing=true; closeModal(); draw();
+  };
+  document.getElementById("cDel").onclick=()=>{
+    if(confirm("Slet denne observation?")){
+      state.obs=state.obs.filter(x=>x.id!==o.id);
+      save(); closeModal(); draw();
+    }
+  };
+}
+
+/* ---------------------------- snail sheet ------------------------- */
+document.getElementById("btnPhoto").onclick=()=>photoInput.click();
+document.getElementById("btnSnails").onclick=snailSheet;
+
+function snailSheet(){
+  openModal(`<h2>Snegle</h2>
+    <div class="sub">Sæt flueben ved en snegl for at vise dens spor. Tryk på ✎ for at redigere.</div>
+    <div id="rows"></div>
+    <button class="btn primary wide" id="cAdd">Tilføj en ny snegl</button>
+    <div class="row" style="justify-content:flex-start">
+      <button class="btn outline" id="cExp">Eksportér data</button>
+      <button class="btn outline" id="cImp">Importér</button>
+    </div>`,true);
+  const rows=document.getElementById("rows");
+  state.snails.forEach(s=>{
+    const os=obsFor(s.id);
+    const div=document.createElement("div");
+    div.className="snailrow";
+    div.innerHTML=`<span class="dot" style="background:${s.color}"></span>
+      <span class="meta"><div class="nm">${esc(s.name)}</div>
+      <div class="inf">${os.length?`${os.length} observation${os.length===1?"":"er"} · senest ${fmtTs(os[os.length-1].ts)}`:"Ingen observationer endnu"}</div></span>
+      <button class="edit">✎</button>
+      <input type="checkbox" ${visible.has(s.id)?"checked":""}>`;
+    const cb=div.querySelector("input");
+    cb.onchange=()=>{cb.checked?visible.add(s.id):visible.delete(s.id); draw();};
+    div.querySelector(".meta").onclick=()=>{cb.checked=!cb.checked; cb.onchange();};
+    div.querySelector(".edit").onclick=e=>{e.stopPropagation(); editSnail(s);};
+    rows.appendChild(div);
+  });
+  document.getElementById("cAdd").onclick=addSnailDialog;
+  document.getElementById("cExp").onclick=exportData;
+  document.getElementById("cImp").onclick=()=>importInput.click();
+}
+
+function swatchHtml(sel){
+  return `<div id="swatches">${PALETTE.map(c=>
+    `<div class="sw${c===sel?" sel":""}" data-c="${c}" style="background:${c}"></div>`).join("")}</div>`;
+}
+function wireSwatches(cb){
+  document.querySelectorAll(".sw").forEach(el=>el.onclick=()=>{
+    document.querySelectorAll(".sw").forEach(x=>x.classList.remove("sel"));
+    el.classList.add("sel"); cb(el.dataset.c);
+  });
+}
+
+function addSnailDialog(){
+  let color=PALETTE[state.snails.length%PALETTE.length];
+  openModal(`<h2>Ny snegl</h2>
+    <label>Navn</label>
+    <input type="text" id="fName" placeholder='F.eks. "Gaston" eller "Blå prik nr. 3"'>
+    ${swatchHtml(color)}
+    <div class="row">
+      <button class="btn" id="c0">Annuller</button>
+      <button class="btn primary" id="c1">Tilføj</button>
+    </div>`);
+  wireSwatches(c=>color=c);
+  document.getElementById("c0").onclick=snailSheet;
+  document.getElementById("c1").onclick=()=>{
+    const name=document.getElementById("fName").value.trim()||`Snegl ${state.snails.length+1}`;
+    const s={id:uid(),name,color};
+    state.snails.push(s); visible.add(s.id);
+    save(); draw(); snailSheet();
+  };
+}
+
+function editSnail(s){
+  let color=s.color;
+  openModal(`<h2>Rediger ${esc(s.name)}</h2>
+    <label>Navn</label><input type="text" id="fName" value="${esc(s.name)}">
+    ${swatchHtml(color)}
+    <button class="btn danger wide" id="cDel">Slet snegl</button>
+    <div class="row">
+      <button class="btn" id="c0">Annuller</button>
+      <button class="btn primary" id="c1">Gem</button>
+    </div>`);
+  wireSwatches(c=>color=c);
+  document.getElementById("c0").onclick=snailSheet;
+  document.getElementById("c1").onclick=()=>{
+    s.name=document.getElementById("fName").value.trim()||s.name;
+    s.color=color; save(); draw(); snailSheet();
+  };
+  document.getElementById("cDel").onclick=()=>{
+    if(confirm(`Slet ${s.name}? Dette sletter også alle dens observationer.`)){
+      state.snails=state.snails.filter(x=>x.id!==s.id);
+      state.obs=state.obs.filter(o=>o.snailId!==s.id);
+      visible.delete(s.id); save(); draw(); snailSheet();
+    }
+  };
+}
+
+/* --------------------------- export/import ------------------------ */
+function exportData(){
+  const blob=new Blob([JSON.stringify({data:state,photo:localStorage.getItem("sf_photo")||null})],
+    {type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="sneglefart-backup.json";
+  a.click();
+}
+importInput.onchange=()=>{
+  const f=importInput.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const j=JSON.parse(r.result);
+      state=j.data||{snails:[],obs:[]};
+      if(j.photo){localStorage.setItem("sf_photo",j.photo);
+        const p=new Image(); p.onload=()=>{photo=p; fitView(); draw();}; p.src=j.photo;}
+      visible.clear(); state.snails.forEach(s=>visible.add(s.id));
+      save(); closeModal(); draw();
+      alert("Data importeret 🐌");
+    }catch(e){alert("Kunne ikke læse filen.");}
+  };
+  r.readAsText(f);
+  importInput.value="";
+};
+
+resize();
+</script>
+</body>
+</html>
