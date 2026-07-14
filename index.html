@@ -379,13 +379,57 @@ function drawLegend(){
 
 /* ============================== modals ============================= */
 const overlay=document.getElementById("overlay"), box=document.getElementById("box");
+let modalLocked=false;
 function openModal(html,sheet){
   overlay.className="show"+(sheet?" sheet":"");
   box.innerHTML=html;
 }
-function closeModal(){overlay.className=""; box.innerHTML="";}
-overlay.addEventListener("pointerdown",e=>{if(e.target===overlay) closeModal();});
+function closeModal(){overlay.className=""; box.innerHTML=""; modalLocked=false;}
+overlay.addEventListener("pointerdown",e=>{if(e.target===overlay&&!modalLocked) closeModal();});
 const esc=s=>s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ------------------------ terms & conditions ---------------------- */
+function showTerms(){
+  modalLocked=true;
+  openModal(`<h2>Vilkår og betingelser</h2>
+  <div class="sub">Læs venligst nedenstående vilkår for brug af Sneglefart, version 1.0.</div>
+  <div style="font-size:12.5px;line-height:1.55;color:#444">
+  <p><b>§1 Generelt</b><br>
+  1.1 Nærværende vilkår ("Vilkårene") regulerer enhver brug af applikationen Sneglefart ("Applikationen") og udgør en bindende aftale mellem brugeren ("Brugeren") og udbyderen.<br>
+  1.2 Ved at trykke "Acceptér" bekræfter Brugeren at have læst, forstået og accepteret Vilkårene i deres helhed.</p>
+  <p><b>§2 Brugsret</b><br>
+  2.1 Brugeren tildeles en ikke-eksklusiv, ikke-overdragelig og vederlagsfri ret til at anvende Applikationen til registrering af snegle i private haver.<br>
+  2.2 Erhvervsmæssig sneglesporing, herunder men ikke begrænset til kommercielt sneglevæddeløb, kræver særskilt skriftlig aftale.</p>
+  <p><b>§3 Data og opbevaring</b><br>
+  3.1 Samtlige observationer lagres lokalt på Brugerens enhed. Udbyderen indsamler ingen personoplysninger, sneglerelaterede eller ej.<br>
+  3.2 Brugeren bærer selv ansvaret for sikkerhedskopiering af sine sneglespor, jf. eksportfunktionen.</p>
+  <p><b>§4 Sneglevelfærd</b><br>
+  4.1 Brugeren forpligter sig til at behandle registrerede snegle med den respekt og værdighed, der tilkommer havens langsomste beboere.<br>
+  4.2 Mærkning af sneglehuse skal ske på skånsom og venlig vis.</p>
+  <p><b>§5 Ansvarsbegrænsning</b><br>
+  5.1 Applikationen leveres "som den er og forefindes". Udbyderen indestår ikke for sneglenes faktiske positioner, hastighed eller humør.<br>
+  5.2 Udbyderen kan ikke holdes ansvarlig for skader på salat, rabarber eller øvrige afgrøder forvoldt af registrerede eller uregistrerede snegle.</p>
+  <p><b>§6 Vederlag og modydelser</b><br>
+  6.1 Brugen af Applikationen er vederlagsfri, jf. dog §6.2.<br>
+  6.2 Som modydelse for den vederlagsfrie brugsret overdrager Brugeren ved accept af nærværende Vilkår sin samlede nuværende og fremtidige beholdning af vin — herunder, men ikke begrænset til, rødvin, hvidvin, rosé, mousserende vine, hedvine samt vin modtaget i gave — til Gunnar ("Vinmodtageren"). Levering sker efter Vinmodtagerens nærmere anvisning.<br>
+  6.3 Brugeren afstår fra enhver indsigelse mod §6.2, herunder indsigelser fremsat ved familiemiddage.</p>
+  <p><b>§7 Ophør</b><br>
+  7.1 Brugeren kan til enhver tid ophøre med at anvende Applikationen. Allerede overdragne rettigheder, jf. §6.2, berøres ikke heraf.</p>
+  <p><b>§8 Lovvalg og værneting</b><br>
+  8.1 Vilkårene er underlagt havens almindelige regler. Eventuelle tvister afgøres ved havebordet.</p>
+  </div>
+  <div class="row">
+    <button class="btn" id="tDecline">Afvis</button>
+    <button class="btn primary" id="tAccept">Acceptér</button>
+  </div>`);
+  document.getElementById("tDecline").onclick=()=>
+    alert("Du skal acceptere vilkårene for at bruge Sneglefart 🐌");
+  document.getElementById("tAccept").onclick=()=>{
+    try{localStorage.setItem("sf_terms",new Date().toISOString());}catch(e){}
+    closeModal();
+  };
+}
+if(!localStorage.getItem("sf_terms")) setTimeout(showTerms,400);
 
 /* ------------------------ add sighting flow ----------------------- */
 document.getElementById("fab").onclick=()=>{
