@@ -6,10 +6,10 @@
 <meta name="theme-color" content="#274D24">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Sneglefart">
+<meta name="apple-mobile-web-app-title" content="SnailTrail">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="apple-touch-icon.png">
-<title>Sneglefart 🐌</title>
+<title>SnailTrail 🐌</title>
 <style>
   :root{
     --green:#3E6B3A; --green-dark:#274D24; --brown:#8A5A33;
@@ -392,10 +392,10 @@ const esc=s=>s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&qu
 function showTerms(){
   modalLocked=true;
   openModal(`<h2>Vilkår og betingelser</h2>
-  <div class="sub">Læs venligst nedenstående vilkår for brug af Sneglefart, version 1.0.</div>
+  <div class="sub">Læs venligst nedenstående vilkår for brug af SnailTrail, version 1.0.</div>
   <div style="font-size:12.5px;line-height:1.55;color:#444">
   <p><b>§1 Generelt</b><br>
-  1.1 Nærværende vilkår ("Vilkårene") regulerer enhver brug af applikationen Sneglefart ("Applikationen") og udgør en bindende aftale mellem brugeren ("Brugeren") og udbyderen.<br>
+  1.1 Nærværende vilkår ("Vilkårene") regulerer enhver brug af applikationen SnailTrail ("Applikationen") og udgør en bindende aftale mellem brugeren ("Brugeren") og udbyderen.<br>
   1.2 Ved at trykke "Acceptér" bekræfter Brugeren at have læst, forstået og accepteret Vilkårene i deres helhed.</p>
   <p><b>§2 Brugsret</b><br>
   2.1 Brugeren tildeles en ikke-eksklusiv, ikke-overdragelig og vederlagsfri ret til at anvende Applikationen til registrering af snegle i private haver.<br>
@@ -422,8 +422,7 @@ function showTerms(){
     <button class="btn" id="tDecline">Afvis</button>
     <button class="btn primary" id="tAccept">Acceptér</button>
   </div>`);
-  document.getElementById("tDecline").onclick=()=>
-    alert("Du skal acceptere vilkårene for at bruge Sneglefart 🐌");
+  document.getElementById("tDecline").onclick=closeModal;
   document.getElementById("tAccept").onclick=()=>{
     try{localStorage.setItem("sf_terms",new Date().toISOString());}catch(e){}
     closeModal();
